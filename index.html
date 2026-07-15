@@ -25,6 +25,11 @@
   }
   .stub::before { left: -9px; }
   .stub::after { right: -9px; }
+  .grid-table { border-collapse: separate; border-spacing: 0 8px; width: 100%; min-width: 620px; }
+  .grid-cell { transition: transform .12s ease; }
+  .grid-cell:hover { transform: scale(1.05); }
+  .scroll-wrap::-webkit-scrollbar { height: 8px; }
+  .scroll-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -36,20 +41,21 @@
 <script>
 const h = React.createElement;
 const useState = React.useState;
+const useMemo = React.useMemo;
 
 /* ---------------------------------------------------
    DATA
 --------------------------------------------------- */
 
 const BOOTHS = {
-  merch:    { name: "Official Merchandise",   th: "สินค้าที่ระลึก",   emoji: "🎽" },
-  stage:    { name: "Bon Odori Center Stage", th: "เวทีกลาง",         emoji: "🎏" },
-  hachicha: { name: "Hachi Cha",              th: "ชงชา",             emoji: "🍵" },
-  roulette: { name: "Lucky Roulette",         th: "รูเล็ตนำโชค",      emoji: "🎡" },
-  shateki:  { name: "Cork Shateki",           th: "ยิงเป้าจุก",       emoji: "🔫" },
-  plinko:   { name: "Plinko",                 th: "พลิงโกะ",          emoji: "🔺" },
-  omikuji:  { name: "Omikuji Suuji Battle",   th: "จับฉลากเลขเด็ด",   emoji: "🎋" },
-  wanage:   { name: "Wanage",                 th: "ห่วงยาง",          emoji: "⭕" },
+  merch:    { name: "Official Merchandise",   short: "Merch",     th: "สินค้าที่ระลึก",   emoji: "🎽" },
+  stage:    { name: "Bon Odori Center Stage", short: "Stage",     th: "เวทีกลาง",         emoji: "🎏" },
+  hachicha: { name: "Hachi Cha",              short: "Hachi Cha", th: "ชงชา",             emoji: "🍵" },
+  roulette: { name: "Lucky Roulette",         short: "Roulette",  th: "รูเล็ตนำโชค",      emoji: "🎡" },
+  shateki:  { name: "Cork Shateki",           short: "Shateki",   th: "ยิงเป้าจุก",       emoji: "🔫" },
+  plinko:   { name: "Plinko",                 short: "Plinko",    th: "พลิงโกะ",          emoji: "🔺" },
+  omikuji:  { name: "Omikuji Suuji Battle",   short: "Omikuji",   th: "จับฉลากเลขเด็ด",   emoji: "🎋" },
+  wanage:   { name: "Wanage",                 short: "Wanage",    th: "ห่วงยาง",          emoji: "⭕" },
 };
 
 const DAY_META = {
@@ -133,6 +139,30 @@ const MEMBERS = {
 };
 
 const MEMBER_NAMES = Object.keys(MEMBERS);
+const DAY_ORDER = ["FRI", "SAT", "SUN"];
+
+function buildCombinedGrid() {
+  const grid = {};
+  DAY_ORDER.forEach((day) => {
+    const timesSet = new Set();
+    MEMBER_NAMES.forEach((name) => {
+      MEMBERS[name].schedule.forEach((s) => {
+        if (s.day === day) timesSet.add(s.time);
+      });
+    });
+    const times = Array.from(timesSet).sort((a, b) => parseInt(a) - parseInt(b));
+    const rows = times.map((time) => {
+      const cells = {};
+      MEMBER_NAMES.forEach((name) => {
+        const entry = MEMBERS[name].schedule.find((s) => s.day === day && s.time === time);
+        cells[name] = entry ? entry.booth : null;
+      });
+      return { time: time, cells: cells };
+    });
+    grid[day] = rows;
+  });
+  return grid;
+}
 
 /* ---------------------------------------------------
    COMPONENT (plain React.createElement, no JSX/Babel)
@@ -140,12 +170,192 @@ const MEMBER_NAMES = Object.keys(MEMBERS);
 
 function BonOdoriSchedule() {
   const [active, setActive] = useState("Rose");
-  const member = MEMBERS[active];
+  const combinedGrid = useMemo(buildCombinedGrid, []);
+  const isCombined = active === "ALL";
+  const member = isCombined ? null : MEMBERS[active];
 
-  const dayOrder = ["FRI", "SAT", "SUN"];
-  const grouped = dayOrder
-    .map((d) => ({ day: d, items: member.schedule.filter((s) => s.day === d) }))
-    .filter((g) => g.items.length > 0);
+  const grouped = !isCombined
+    ? DAY_ORDER
+        .map((d) => ({ day: d, items: member.schedule.filter((s) => s.day === d) }))
+        .filter((g) => g.items.length > 0)
+    : [];
+
+  const memberPills = MEMBER_NAMES.map((name) => {
+    const isActive = active === name;
+    const c = MEMBERS[name].color;
+    return h("button", {
+      key: name,
+      className: "member-pill",
+      onClick: () => setActive(name),
+      style: {
+        border: "1.5px solid " + (isActive ? c : "rgba(255,255,255,0.18)"),
+        background: isActive ? c : "rgba(255,255,255,0.04)",
+        color: isActive ? "#14143a" : "#F4F0FF",
+        fontFamily: "'Kanit', sans-serif",
+        fontWeight: 700,
+        fontSize: 15,
+        padding: "9px 20px",
+        borderRadius: 999,
+        cursor: "pointer",
+        boxShadow: isActive ? ("0 6px 20px " + c + "55") : "none",
+      }
+    }, name);
+  });
+
+  const combinedPill = h("button", {
+    className: "member-pill",
+    onClick: () => setActive("ALL"),
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 7,
+      border: "1.5px solid " + (isCombined ? "#F4D035" : "rgba(255,255,255,0.18)"),
+      background: isCombined ? "#F4D035" : "rgba(255,255,255,0.04)",
+      color: isCombined ? "#14143a" : "#F4F0FF",
+      fontFamily: "'Kanit', sans-serif",
+      fontWeight: 700,
+      fontSize: 15,
+      padding: "9px 20px",
+      borderRadius: 999,
+      cursor: "pointer",
+      boxShadow: isCombined ? "0 6px 20px #F4D03555" : "none",
+    }
+  }, h("span", null, "▦"), "ตารางรวม 5 คน");
+
+  let mainSection;
+
+  if (!isCombined) {
+    mainSection = h("div", { style: { maxWidth: 640, margin: "0 auto", padding: "0 20px" } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 18, color: member.color } },
+        h("span", { style: { fontSize: 18 } }, "🎟️"),
+        h("span", { style: { fontWeight: 700, fontSize: 15 } }, active + " · ทั้งหมด " + member.schedule.length + " รอบ")
+      ),
+      grouped.map((g) => h("div", { key: g.day, style: { marginBottom: 28 } },
+        h("div", {
+          style: {
+            display: "inline-flex", alignItems: "center", gap: 8,
+            background: DAY_META[g.day].color, color: "#0c0c26", fontWeight: 800, fontSize: 13,
+            padding: "5px 14px", borderRadius: 8, marginBottom: 14, letterSpacing: 0.5,
+          }
+        },
+          DAY_META[g.day].label,
+          h("span", { style: { fontWeight: 500, opacity: 0.75 } }, DAY_META[g.day].full)
+        ),
+        h("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+          g.items.map((item, i) => {
+            const b = BOOTHS[item.booth];
+            return h("div", {
+              key: i,
+              className: "booth-tag stub",
+              style: {
+                background: "rgba(255,255,255,0.045)",
+                border: "1px dashed rgba(255,255,255,0.22)",
+                borderRadius: 14,
+                padding: "14px 20px",
+                display: "flex",
+                alignItems: "center",
+                gap: 16,
+              }
+            },
+              h("div", { style: { fontSize: 26, width: 42, textAlign: "center", flexShrink: 0 } }, b.emoji),
+              h("div", { style: { flex: 1, minWidth: 0 } },
+                h("div", { style: { fontWeight: 700, fontSize: 15.5, color: "#FFFFFF" } }, b.name),
+                h("div", { style: { display: "flex", alignItems: "center", gap: 5, marginTop: 6, fontSize: 12.5, color: "#C7C2EE" } },
+                  h("span", { style: { fontSize: 12 } }, "👥"),
+                  h("span", null, item.withList.join(", "))
+                )
+              ),
+              h("div", { style: { display: "flex", alignItems: "center", gap: 5, fontWeight: 700, fontSize: 14, color: member.color, flexShrink: 0, whiteSpace: "nowrap" } },
+                h("span", { style: { fontSize: 13 } }, "⏰"),
+                item.time
+              )
+            );
+          })
+        )
+      ))
+    );
+  } else {
+    const dayBlocks = DAY_ORDER.map((day) => {
+      const headerRow = h("tr", null,
+        h("th", { style: { textAlign: "left", fontSize: 12.5, color: "#9C97C9", fontWeight: 600, padding: "0 10px", width: 90 } }, "เวลา"),
+        MEMBER_NAMES.map((name) => h("th", {
+          key: name,
+          style: { fontSize: 13.5, fontWeight: 800, color: MEMBERS[name].color, padding: "0 6px 6px", textAlign: "center" }
+        }, name))
+      );
+
+      const bodyRows = combinedGrid[day].map((row) => {
+        const cells = MEMBER_NAMES.map((name) => {
+          const boothKey = row.cells[name];
+          const b = boothKey ? BOOTHS[boothKey] : null;
+          return h("td", { key: name, style: { padding: "0 4px" } },
+            h("div", {
+              className: "grid-cell",
+              style: {
+                background: b ? "rgba(255,255,255,0.06)" : "transparent",
+                border: b ? ("1px solid " + MEMBERS[name].color + "55") : "1px dashed rgba(255,255,255,0.08)",
+                borderRadius: 10,
+                minHeight: 52,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "6px 2px",
+                textAlign: "center",
+              }
+            },
+              b
+                ? [
+                    h("span", { key: "e", style: { fontSize: 18, lineHeight: 1 } }, b.emoji),
+                    h("span", { key: "t", style: { fontSize: 10, color: "#C7C2EE", marginTop: 3, lineHeight: 1.1 } }, b.short),
+                  ]
+                : h("span", { style: { fontSize: 12, color: "#4A4670" } }, "–")
+            )
+          );
+        });
+        return h("tr", { key: row.time },
+          h("td", { style: { fontSize: 12.5, fontWeight: 700, color: "#E8E4FF", padding: "0 10px", whiteSpace: "nowrap" } }, row.time),
+          cells
+        );
+      });
+
+      return h("div", { key: day, style: { marginBottom: 32 } },
+        h("div", {
+          style: {
+            display: "inline-flex", alignItems: "center", gap: 8,
+            background: DAY_META[day].color, color: "#0c0c26", fontWeight: 800, fontSize: 13,
+            padding: "5px 14px", borderRadius: 8, marginBottom: 14, letterSpacing: 0.5,
+          }
+        },
+          DAY_META[day].label,
+          h("span", { style: { fontWeight: 500, opacity: 0.75 } }, DAY_META[day].full)
+        ),
+        h("div", { className: "scroll-wrap", style: { overflowX: "auto", paddingBottom: 4 } },
+          h("table", { className: "grid-table" },
+            h("thead", null, headerRow),
+            h("tbody", null, bodyRows)
+          )
+        )
+      );
+    });
+
+    const legend = h("div", {
+      style: {
+        display: "flex", flexWrap: "wrap", gap: "8px 18px", justifyContent: "center",
+        marginTop: 8, padding: "16px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 14,
+      }
+    },
+      Object.values(BOOTHS).map((b) => h("div", {
+        key: b.name,
+        style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#B9B4E0" }
+      },
+        h("span", { style: { fontSize: 15 } }, b.emoji),
+        h("span", null, b.name)
+      ))
+    );
+
+    mainSection = h("div", { style: { maxWidth: 900, margin: "0 auto", padding: "0 20px" } }, dayBlocks, legend);
+  }
 
   return h("div", {
     style: {
@@ -166,82 +376,13 @@ function BonOdoriSchedule() {
         "รวมทุกรอบของ Rose · Inkcha · Marine · Sindy · Praew จากทั้ง 8 บูธกิจกรรมตลอด 3 วัน")
     ),
 
-    h("div", { style: { display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", padding: "8px 20px 32px" } },
-      MEMBER_NAMES.map((name) => {
-        const isActive = active === name;
-        const c = MEMBERS[name].color;
-        return h("button", {
-          key: name,
-          className: "member-pill",
-          onClick: () => setActive(name),
-          style: {
-            border: "1.5px solid " + (isActive ? c : "rgba(255,255,255,0.18)"),
-            background: isActive ? c : "rgba(255,255,255,0.04)",
-            color: isActive ? "#14143a" : "#F4F0FF",
-            fontFamily: "'Kanit', sans-serif",
-            fontWeight: 700,
-            fontSize: 15,
-            padding: "9px 20px",
-            borderRadius: 999,
-            cursor: "pointer",
-            boxShadow: isActive ? ("0 6px 20px " + c + "55") : "none",
-          }
-        }, name);
-      })
+    h("div", { style: { display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", padding: "8px 20px 32px", alignItems: "center" } },
+      memberPills,
+      h("div", { style: { width: 1, height: 24, background: "rgba(255,255,255,0.18)", margin: "0 4px" } }),
+      combinedPill
     ),
 
-    h("div", { style: { maxWidth: 640, margin: "0 auto", padding: "0 20px" } },
-      h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 18, color: member.color } },
-        h("span", { style: { fontSize: 18 } }, "🎟️"),
-        h("span", { style: { fontWeight: 700, fontSize: 15 } }, active + " · ทั้งหมด " + member.schedule.length + " รอบ")
-      ),
-
-      grouped.map((g) => h("div", { key: g.day, style: { marginBottom: 28 } },
-        h("div", {
-          style: {
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: DAY_META[g.day].color, color: "#0c0c26", fontWeight: 800, fontSize: 13,
-            padding: "5px 14px", borderRadius: 8, marginBottom: 14, letterSpacing: 0.5,
-          }
-        },
-          DAY_META[g.day].label,
-          h("span", { style: { fontWeight: 500, opacity: 0.75 } }, DAY_META[g.day].full)
-        ),
-
-        h("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
-          g.items.map((item, i) => {
-            const b = BOOTHS[item.booth];
-            return h("div", {
-              key: i,
-              className: "booth-tag stub",
-              style: {
-                background: "rgba(255,255,255,0.045)",
-                border: "1px dashed rgba(255,255,255,0.22)",
-                borderRadius: 14,
-                padding: "14px 20px",
-                display: "flex",
-                alignItems: "center",
-                gap: 16,
-              }
-            },
-              h("div", { style: { fontSize: 26, width: 42, textAlign: "center", flexShrink: 0 } }, b.emoji),
-              h("div", { style: { flex: 1, minWidth: 0 } },
-                h("div", { style: { fontWeight: 700, fontSize: 15.5, color: "#FFFFFF" } }, b.name),
-                h("div", { style: { fontSize: 12.5, color: "#9C97C9", marginTop: 1 } }, b.th),
-                h("div", { style: { display: "flex", alignItems: "center", gap: 5, marginTop: 6, fontSize: 12.5, color: "#C7C2EE" } },
-                  h("span", { style: { fontSize: 12 } }, "👥"),
-                  h("span", null, "ร่วมรอบกับ " + item.withList.join(", "))
-                )
-              ),
-              h("div", { style: { display: "flex", alignItems: "center", gap: 5, fontWeight: 700, fontSize: 14, color: member.color, flexShrink: 0, whiteSpace: "nowrap" } },
-                h("span", { style: { fontSize: 13 } }, "⏰"),
-                item.time
-              )
-            );
-          })
-        )
-      ))
-    ),
+    mainSection,
 
     h("p", { style: { textAlign: "center", color: "#6E699C", fontSize: 12, marginTop: 20 } },
       "* เวลาและรายชื่ออาจมีการเปลี่ยนแปลงตามประกาศหน้างาน — ตรวจสอบจากป้ายจริงอีกครั้ง")
